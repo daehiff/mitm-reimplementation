@@ -2,7 +2,7 @@
 // Created by David Winderl on 5/1/21.
 //
 
-#include "Gate.h"
+#include "gate.h"
 
 #include <iostream>
 #include <xtensor.hpp>
@@ -12,8 +12,7 @@ using namespace std;
 using namespace xt;
 
 void Gate::get_unitary(xarrayc &out) {
-    auto t = std::cos(M_PI / 4.0) + std::sin(M_PI / 4.0) * 1.0i;
-    auto tdg = std::cos(M_PI / 4.0) - std::sin(M_PI / 4.0) * 1.0i;
+            complex<double> tdg, t;
     switch (this->type) {
         case H:
             out = 1.0 / sqrt(2) * xarray<double>({{1.0, 1.0},
@@ -47,10 +46,12 @@ void Gate::get_unitary(xarrayc &out) {
                                            {0.0, -1.0i}});
             break;
         case T:
+            t = std::cos(M_PI / 4.0) + std::sin(M_PI / 4.0) * 1.0i;
             out = xarray<complex<double>>({{1.0, 0.0},
                                            {0.0, t}});
             break;
         case Tdg:
+            tdg = std::cos(M_PI / 4.0) - std::sin(M_PI / 4.0) * 1.0i;
             out = xarray<complex<double>>({{1.0, 0.0},
                                            {0.0, tdg}});
             break;

@@ -1,4 +1,4 @@
-#include "Circuit.h"
+#include "circuit.h"
 
 //
 // Created by David Winderl on 5/1/21.
@@ -40,15 +40,13 @@ std::string gateToString(GateType gate) {
  * @param circuitSize
  * @return
  */
-xarrayc computeNFoldUnitary(Gate gate, int circuitSize) {
+void computeNFoldUnitary(Gate gate, int circuitSize, xarrayc &out) {
     int n = (gate.type == CX) ? circuitSize - 2 : circuitSize - 1;
-    xarrayc out; // 2^1x2^^ or 2^2x2^2 cnot
     gate.get_unitary(out);
     if (n == 0)
-        return out;
+        return;
     xarrayc identity = xt::eye((int) std::pow(2, n));
     out = xt::linalg::kron(out, identity);
-    return out;
 }
 
 vector<int> getOrder(Gate gate, int n) {
@@ -72,20 +70,7 @@ vector<int> getOrder(Gate gate, int n) {
 
 }
 
-vector<int> generateTwos(int n) {
-    vector<int> tmp;
-    tmp.reserve(n);
-    for (int i = 0; i < n; ++i) {
-        tmp.push_back(2);
-    }
-    return tmp;
-}
 
-/**
- * TODO check by some examples
- * @param gate
- * @param permutation
- */
 void reorderGates(xarrayc &gate, const vector<int> &permutation) {
     int n = permutation.size();
     vector<int> tmp;
@@ -96,19 +81,22 @@ void reorderGates(xarrayc &gate, const vector<int> &permutation) {
     for (auto i : permutation) {
         tmp.push_back(i + n);
     }
-    vector<int> twos = generateTwos(2 * n);
-    gate = gate.reshape(generateTwos(2 * n));
-    gate = transpose(gate, tmp);
-    gate = gate.reshape({pow(2, n), pow(2, n)});
+    vector<int> twos;
+    twos.reserve(2 * n);
+    for (int i = 0; i < 2 * n; ++i) {
+        twos.push_back(2);
+    }
+    int pow_ = pow(2, n);
+    gate = transpose(gate.reshape(twos), tmp);
+    gate = gate.reshape({pow_, pow_});
 }
 
 
 xarrayc Circuit::getUnitary() {
     xarrayc out = xt::eye(pow(2, this->numQubits));
+    xarrayc gate_unitary;
     for (auto gate: this->gates) {
-        /*cout << gateToString(gate.type) << endl;*/
-        xarrayc gate_unitary = computeNFoldUnitary(gate, this->numQubits);
-        /*cout << setprecision(3) << gate_unitary << endl;*/
+        computeNFoldUnitary(gate, this->numQubits, gate_unitary);
         vector<int> order = getOrder(gate, this->numQubits);
         reorderGates(gate_unitary, order);
         out = xt::linalg::dot(gate_unitary, out);
@@ -259,7 +247,6 @@ Circuit Circuit::compose(const Circuit &other) const {
 }
 
 void Circuit::generateHash(const vector<xarrayc> &static_vecs, int m) {
-    assert(static_vecs.size() == m);
     xarrayc unitary = this->getUnitary();
     this->hash = xt::zeros<double>({m, m});
     for (int i = 0; i < m; ++i) {
@@ -273,7 +260,6 @@ void Circuit::generateHash(const vector<xarrayc> &static_vecs, int m) {
 
 
 void Circuit::generateHashInv(const vector<xarrayc> &static_vecs, int m, const xarrayc &u) {
-    assert(static_vecs.size() == m);
     xarrayc unitary_circ = this->getUnitary();
     xarrayc unitary = xt::linalg::dot(xt::transpose(xt::conj(unitary_circ)), u);
     this->hash = xt::zeros<double>({m, m});
@@ -316,6 +302,14 @@ Circuit Circuit::inverse() {
     }
     return out;
 }
+
+
+string Circuit::toqcFormat() {
+    string out = "";
+    return out;
+}
+
+
 
 
 

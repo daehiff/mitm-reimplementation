@@ -1,6 +1,6 @@
-#include "Gate.h"
-#include "Circuit.h"
-
+#include "gate.h"
+#include "circuit.h"
+#include "dispatch_queue.h"
 #include "utils.h"
 
 
@@ -77,11 +77,19 @@ bool inSet(const vector<_GateType *> &set, _GateType *circ, int size) {
  * @return
  */
 vector<Circuit> generateAllCombinations(int size, const vector<xarrayc> &static_vecs, int m) {
-    vector<_GateType> oneQubitGateSet = {h, x, y, z, s, sdg, t, tdg};
+    vector<_GateType> oneQubitGateSet = {h, s, sdg, t, tdg};
     vector<_GateType *> queue;
     _GateType tmp_archetype[size];
     generateArchetype(size, tmp_archetype);
-    queue.push_back(tmp_archetype);
+    for (_GateType gate: oneQubitGateSet) {
+        for (int j = 0; j < size; j++) {
+            auto *new_vec = new _GateType[size];
+            deepcopy(tmp_archetype, new_vec, size);
+            new_vec[j] = gate;
+            queue.push_back(new_vec);
+        }
+    }
+    //queue.push_back(tmp_archetype);
     for (int j = 0; j < size; ++j) {
         for (int k = 0; k < size; ++k) {
             if (j != k) {
@@ -105,7 +113,7 @@ vector<Circuit> generateAllCombinations(int size, const vector<xarrayc> &static_
                 continue;
             for (int j = 0; j < size; j++) {
                 if (tmp[j] == id) {
-                    auto *new_vec = new _GateType[size]; // TODO allocate on stack
+                    auto *new_vec = new _GateType[size];
                     deepcopy(tmp, new_vec, size);
                     new_vec[j] = gate;
                     queue.push_back(new_vec);
@@ -145,15 +153,58 @@ void generateNextSet(const vector<Circuit> &allCombinations,
 
         }
     }
+}
+
+void compose_circuit(Circuit s, Circuit v,
+                     vector<Circuit> &s_i_new,
+                     vector<Circuit> &s_i_new_inv,
+                     vector<xarrayc> &static_vecs,
+                     int m,
+                     const xarrayc &unitary) {
+    Circuit circ = s.compose(v);
+    Circuit circ1 = s.compose(v);
+    circ.generateHash(static_vecs, m);
+    circ1.generateHashInv(static_vecs, m, unitary);
+    s_i_new.emplace_back(circ);
+    s_i_new_inv.emplace_back(circ1);
+}
 
 
+std::mutex mtx;
+
+void generateNextSetAsync(const vector<Circuit> &allCombinations,
+                          const vector<Circuit> &s_i,
+                          vector<Circuit> &s_i_new,
+                          vector<Circuit> &s_i_new_inv,
+                          vector<xarrayc> &static_vecs,
+                          int m, const xarrayc &unitary) {
+    s_i_new.reserve(allCombinations.size() * s_i.size());
+    s_i_new_inv.reserve(allCombinations.size() * s_i.size());
+
+    dispatch_queue_t task_queue;
+    for (const Circuit &v: allCombinations) {
+        for (const Circuit &s: s_i) {
+            task_queue.enqueue([&]() {
+                Circuit circ = s.compose(v);
+                Circuit circ1 = s.compose(v);
+                circ.generateHash(static_vecs, m);
+                circ1.generateHashInv(static_vecs, m, unitary);
+                mtx.lock();
+                s_i_new.emplace_back(circ);
+                s_i_new_inv.emplace_back(circ1);
+                mtx.unlock();
+            });
+        }
+    }
+    task_queue.wait();
 }
 
 bool hasIntersection(const vector<Circuit> &s, const vector<Circuit> &s_inv, const xarrayc &unitary,
                      Circuit &v,
                      Circuit &w) {
     vector<Circuit> intersection_s_inv, intersection_s;
-
+    unsigned long min_size = INT_MAX;
+    bool found_intersection = false;
     int i = 0, j = 0, s_size = s.size(), s1_size = s_inv.size();
     while (i < s_size && j < s1_size) {
         if (s[i] < s_inv[j]) {
@@ -161,27 +212,24 @@ bool hasIntersection(const vector<Circuit> &s, const vector<Circuit> &s_inv, con
         } else if (s[i] > s_inv[j]) {
             j++;
         } else {
-            intersection_s.push_back(s[i]);
-            intersection_s_inv.push_back(s_inv[j]);
+            auto w_ = s[i];
+            auto v_ = s_inv[j];
             i++;
             j++;
-        }
-    }
-    int min_size = INT_MAX;
-    bool found_intersection = false;
-    // Assume, that the intersection is by far less due few key collisions
-    for (auto w_: intersection_s) {
-        for (auto v_: intersection_s_inv) {
-            auto u_v = v_.getUnitary();
-            u_v = xt::linalg::dot(xt::transpose(xt::conj(u_v)), unitary);
-
-            auto u_w = w_.getUnitary();
             Circuit out = w_.compose(v_);
-            if (xt::allclose(u_v, u_w) && out.gates.size() < min_size) {
-                v = v_;
-                w = w_;
-                min_size = out.gates.size();
-                found_intersection = true;
+            if (out.gates.size() > min_size) {
+                continue;
+            } else {
+                auto u_v = v_.getUnitary();
+                u_v = xt::linalg::dot(xt::transpose(xt::conj(u_v)), unitary);
+                auto u_w = w_.getUnitary();
+                if (xt::allclose(u_v, u_w)) {
+                    v = v_;
+                    w = w_;
+                    found_intersection = true;
+                    min_size = out.gates.size();
+                }
+
             }
         }
     }
@@ -209,7 +257,7 @@ vector<xarrayc> fillStaticVecs(int m, int size) {
 }
 
 
-Circuit mitmAlgorithm(const xarrayc &unitary, int depth, int numQubits, int m = 1) {
+Circuit mitmAlgorithm(const xarrayc &unitary, int depth, int numQubits, int m = 2) {
     vector<xarrayc> static_vecs = fillStaticVecs(m, numQubits);
     vector<Circuit> s_i, s_i_inv_u;
     vector<Circuit> s_i_prev, s_i_inv_u_prev;
@@ -223,7 +271,10 @@ Circuit mitmAlgorithm(const xarrayc &unitary, int depth, int numQubits, int m = 
         cout << "Generating all combinations" << endl;
         s_i.clear();
         s_i_inv_u.clear();
-        generateNextSet(allCombinations, s_i_prev, s_i, s_i_inv_u, static_vecs, m, unitary);
+        if (depth < 2)
+            generateNextSet(allCombinations, s_i_prev, s_i, s_i_inv_u, static_vecs, m, unitary);
+        else
+            generateNextSetAsync(allCombinations, s_i_prev, s_i, s_i_inv_u, static_vecs, m, unitary);
         cout << "Sorting..." << endl;
         std::sort(s_i.begin(), s_i.end());
         std::sort(s_i_inv_u.begin(), s_i_inv_u.end());
@@ -249,7 +300,12 @@ Circuit mitmAlgorithm(const xarrayc &unitary, int depth, int numQubits, int m = 
     return Circuit(0);
 }
 
-// TODO little sanaty checks, extends this as the alg is working :)
+/*
+ * ========================================
+ * Sanity checks and small tests
+ * ========================================
+ */
+
 void circuit_test() {
     int numQubits = 3;
     Circuit circ = Circuit(numQubits);
@@ -276,11 +332,6 @@ void circuit_test() {
 
 void test_hash() {
     int m = 1, numQubits = 2;
-    /*vector<xarrayc> static_vecs;
-    static_vecs.push_back({-23.995845 + 38.832744i, 66.930692 - 93.855779i,
-                           -8.07673 + 5.400387i, 34.298768 - 98.603628i});
-
-*/
     vector<xarrayc> static_vecs = fillStaticVecs(m, numQubits);
     xarrayc unitary = {
             {1.0, 0.0, 0.0, 0.0},
@@ -335,22 +386,47 @@ void test_set_generation() {
 
 
 void test_mitm_algorithm() {
-    // unitary w.r.t CY => s*, CX, s
     xt::xarray<complex<double>> unitary_cy = {
             {1.0, 0.0, 0.0, 0.0},
             {0.0, 1.0, 0.0, 0.0},
             {0.0, 0.0, 0.0, -1.i},
-            {0.0, 0.0, 1.i, 0.0}};
-    auto circ = mitmAlgorithm(unitary_cy, 10, 2, 1);
-    cout << circ.toString() << endl;
-    assert(circ.gates.size() == 3);
-    assert(circ.gates[0].type == Sdg && circ.gates[0].register_position == 1);
-    assert(circ.gates[1].type == CX && circ.gates[1].register_position == 1);
-    assert(circ.gates[2].type == S && circ.gates[2].register_position == 1);
-    // TODO find other test-cases from paper and test them against circuit
+            {0.0, 0.0, 1.i, 0.0}
+    };
+    auto circ_cy = mitmAlgorithm(unitary_cy, 10, 2, 1);
+    cout << circ_cy.toString() << endl;
+    assert(circ_cy.gates.size() == 3);
+    assert(xt::allclose(circ_cy.getUnitary(), unitary_cy));
+
+    xt::xarray<complex<double>> unitary_cz = {
+            {1.0, 0.0, 0.0, 0.0},
+            {0.0, 1.0, 0.0, 0.0},
+            {0.0, 0.0, 1.0, 0.i},
+            {0.0, 0.0, 0.i, -1.0}
+    };
+    auto circ_cz = mitmAlgorithm(unitary_cz, 10, 2, 1);
+    cout << circ_cz.toString() << endl;
+    assert(circ_cz.gates.size() == 3);
+    assert(xt::allclose(circ_cz.getUnitary(), unitary_cz));
+
 }
 
 int main() {
-    test_mitm_algorithm();
+    test_hash();
+    const clock_t begin_time = clock();
+/*    xt::xarray<complex<double>> unitary_cy = {
+            {1.0, 0.0, 0.0, 0.0},
+            {0.0, 1.0, 0.0, 0.0},
+            {0.0, 0.0, 0.0, -1.i},
+            {0.0, 0.0, 1.i, 0.0}
+    };*/
+    xt::xarray<complex<double>> unitary_cy = {
+            {1.0, 0.0,           0.0,            0.0},
+            {0.0, 1.0 / sqrt(2), 1.0 / sqrt(2),  0.0},
+            {0.0, 1.0 / sqrt(2), -1.0 / sqrt(2), 0.0},
+            {0.0, 0.0,           0.0,            0.0}
+    };
+    auto circ_cy = mitmAlgorithm(unitary_cy, 7, 2, 1);
+    std::cout << float(clock() - begin_time) / CLOCKS_PER_SEC << endl;
+    cout << circ_cy.toString() << endl;
     return 0;
 }

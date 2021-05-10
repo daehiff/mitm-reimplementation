@@ -2,7 +2,7 @@
 // Created by David Winderl on 5/1/21.
 //
 #include <iostream>
-#include "Gate.h"
+#include "gate.h"
 
 
 using namespace std;

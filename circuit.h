@@ -6,8 +6,8 @@
 #define MITM_ALGORITHM_CIRCUIT_H
 
 #include "utils.h"
-#include "Circuit.h"
-#include "Gate.h"
+#include "circuit.h"
+#include "gate.h"
 
 using namespace std;
 
@@ -56,8 +56,9 @@ public:
 
     Circuit compose(const Circuit &other) const;
 
-
     void addGate(GateType type, int q_register);
+
+    string toqcFormat();
 };
 
 
