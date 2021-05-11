@@ -411,7 +411,6 @@ void test_mitm_algorithm() {
 }
 
 int main() {
-    test_hash();
     const clock_t begin_time = clock();
 /*    xt::xarray<complex<double>> unitary_cy = {
             {1.0, 0.0, 0.0, 0.0},
@@ -425,7 +424,7 @@ int main() {
             {0.0, 1.0 / sqrt(2), -1.0 / sqrt(2), 0.0},
             {0.0, 0.0,           0.0,            0.0}
     };
-    auto circ_cy = mitmAlgorithm(unitary_cy, 7, 2, 1);
+    auto circ_cy = mitmAlgorithm(unitary_cy, 9, 2, 1);
     std::cout << float(clock() - begin_time) / CLOCKS_PER_SEC << endl;
     cout << circ_cy.toString() << endl;
     return 0;

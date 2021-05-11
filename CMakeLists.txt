@@ -3,9 +3,6 @@ project(mitm_algorithm)
 
 set(CMAKE_CXX_STANDARD 14)
 
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-
-
 find_package(xtl REQUIRED)
 find_package(xtensor REQUIRED)
 find_package(xtensor-blas REQUIRED)
@@ -32,7 +29,6 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -Wal
 set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -Wall -Wextra -Werror ")
 
 add_executable(mitm_algorithm main.cpp circuit.cpp circuit.h gate.cpp gate.h utils.h dispatch_queue.cpp dispatch_queue.h)
-
 
 target_link_libraries(mitm_algorithm xtensor xtensor-blas ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 
