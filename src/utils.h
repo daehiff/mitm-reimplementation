@@ -1,7 +1,3 @@
-//
-// Created by David Winderl on 5/2/21.
-//
-
 #ifndef MITM_ALGORITHM_UTILS_H
 #define MITM_ALGORITHM_UTILS_H
 
