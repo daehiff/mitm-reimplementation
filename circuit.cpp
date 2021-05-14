@@ -304,8 +304,59 @@ Circuit Circuit::inverse() {
 }
 
 
+std::string gateToQCString(GateType gate) {
+    switch (gate) {
+
+        case H:
+            return "H ";
+        case CX:
+            return "tof";
+        case X:
+            return "X";
+        case Y:
+            return "Y";
+        case Z:
+            return "Z";
+        case S:
+            return "S";
+        case Sdg:
+            return "S*";
+        case T:
+            return "T";
+        case Tdg:
+            return "T*";
+        case I:
+            return "";
+    }
+}
+
 string Circuit::toqcFormat() {
-    string out = "";
+    string out;
+    out += ".v ";
+    for (int i = 0; i < this->numQubits; i++) {
+        out += ("q" + to_string(i) + " ");
+    }
+    out += "\n";
+
+    out += ".i ";
+    for (int i = 0; i < this->numQubits; i++) {
+        out += ("q" + to_string(i) + " ");
+    }
+    out += "\n";
+    out += "\n";
+    out += "BEGIN\n";
+    for (auto gate: this->gates) {
+        string qubit_position;
+        if (gate.register_position != gate.control_position)
+            qubit_position = "q" + to_string(gate.register_position) + " q" + to_string(gate.control_position);
+        else
+            qubit_position = "q" + to_string(gate.register_position);
+
+        string gate_name = gateToQCString(gate.type);
+        out += (gate_name + " " + qubit_position + "\n");
+
+    }
+    out += "END\n";
     return out;
 }
 

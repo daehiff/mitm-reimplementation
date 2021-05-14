@@ -133,7 +133,6 @@ vector<Circuit> generateAllCombinations(int size, const vector<xarrayc> &static_
 
 }
 
-// TODO make this multiprocessing to get more effective
 void generateNextSet(const vector<Circuit> &allCombinations,
                      const vector<Circuit> &s_i,
                      vector<Circuit> &s_i_new,
@@ -155,19 +154,6 @@ void generateNextSet(const vector<Circuit> &allCombinations,
     }
 }
 
-void compose_circuit(Circuit s, Circuit v,
-                     vector<Circuit> &s_i_new,
-                     vector<Circuit> &s_i_new_inv,
-                     vector<xarrayc> &static_vecs,
-                     int m,
-                     const xarrayc &unitary) {
-    Circuit circ = s.compose(v);
-    Circuit circ1 = s.compose(v);
-    circ.generateHash(static_vecs, m);
-    circ1.generateHashInv(static_vecs, m, unitary);
-    s_i_new.emplace_back(circ);
-    s_i_new_inv.emplace_back(circ1);
-}
 
 
 std::mutex mtx;
@@ -300,132 +286,5 @@ Circuit mitmAlgorithm(const xarrayc &unitary, int depth, int numQubits, int m = 
     return Circuit(0);
 }
 
-/*
- * ========================================
- * Sanity checks and small tests
- * ========================================
- */
-
-void circuit_test() {
-    int numQubits = 3;
-    Circuit circ = Circuit(numQubits);
-    circ.addGate(CX, 1, 0);
-    circ.addGate(H, 0);
-    circ.addGate(X, 0);
-    circ.addGate(Y, 1);
-    circ.addGate(Z, 0);
-    circ.addGate(T, 2);
-    circ.addGate(Tdg, 1);
-    circ.addGate(S, 2);
-    circ.addGate(Sdg, 1);
-    cout << circ.toString() << endl;
-    auto u = circ.getUnitary();
-    //cout << u << endl;
-    cout << "Is Identity: " << endl;
-    cout <<
-         ((xt::allclose(xt::eye<complex<double>>((int) pow(2, numQubits)),
-                        xt::linalg::dot(xt::transpose(xt::conj(u)), u)))
-          ? "True" : "False")
-         << endl;
-}
 
 
-void test_hash() {
-    int m = 1, numQubits = 2;
-    vector<xarrayc> static_vecs = fillStaticVecs(m, numQubits);
-    xarrayc unitary = {
-            {1.0, 0.0, 0.0, 0.0},
-            {0.0, 1.0, 0.0, 0.0},
-            {0.0, 0.0, 0.0, -1.i},
-            {0.0, 0.0, 1.i, 0.0}};
-
-    Circuit circ = Circuit(2);
-    circ.addGate(CX, 1, 0);
-    circ.addGate(S, 1);
-    circ.generateHashInv(static_vecs, m, unitary);
-
-    Circuit circ1 = Circuit(2);
-    circ1.addGate(Sdg, 1);
-    circ1.generateHash(static_vecs, m);
-
-    auto c1_u = circ1.getUnitary();
-    auto c_u = circ.getUnitary();
-    c_u = xt::linalg::dot(xt::transpose(xt::conj(c_u)), unitary);
-    cout << (xt::real(circ1.hash) < xt::real(circ.hash)) << endl;
-    cout << (xt::real(circ1.hash) > xt::real(circ.hash)) << endl;
-    cout << ((xt::allclose(c1_u, c_u)) ? "True" : "False") << endl;
-}
-
-
-void test_set_generation() {
-    int m = 1;
-    int numQubits = 2;
-    vector<xarrayc> static_vecs = fillStaticVecs(m, numQubits);
-    xarrayc unitary = {
-            {1.0, 0.0, 0.0, 0.0},
-            {0.0, 1.0, 0.0, 0.0},
-            {0.0, 0.0, 0.0, -1.i},
-            {0.0, 0.0, 1.i, 0.0}};
-
-    vector<Circuit> s1;
-    vector<Circuit> s2;
-    Circuit circ = Circuit(2);
-    circ.addGate(CX, 1, 0);
-    circ.addGate(S, 1);
-    circ.generateHashInv(static_vecs, m, unitary);
-    s1.push_back(circ);
-    Circuit circ1 = Circuit(2);
-    circ1.addGate(Sdg, 1);
-    circ1.generateHash(static_vecs, m);
-    s2.push_back(circ1);
-    Circuit v = Circuit(numQubits);
-    Circuit w = Circuit(numQubits);
-    auto has_intersection = hasIntersection(s2, s1, unitary, v, w);
-    cout << ((has_intersection) ? "True" : "False") << endl;
-}
-
-
-void test_mitm_algorithm() {
-    xt::xarray<complex<double>> unitary_cy = {
-            {1.0, 0.0, 0.0, 0.0},
-            {0.0, 1.0, 0.0, 0.0},
-            {0.0, 0.0, 0.0, -1.i},
-            {0.0, 0.0, 1.i, 0.0}
-    };
-    auto circ_cy = mitmAlgorithm(unitary_cy, 10, 2, 1);
-    cout << circ_cy.toString() << endl;
-    assert(circ_cy.gates.size() == 3);
-    assert(xt::allclose(circ_cy.getUnitary(), unitary_cy));
-
-    xt::xarray<complex<double>> unitary_cz = {
-            {1.0, 0.0, 0.0, 0.0},
-            {0.0, 1.0, 0.0, 0.0},
-            {0.0, 0.0, 1.0, 0.i},
-            {0.0, 0.0, 0.i, -1.0}
-    };
-    auto circ_cz = mitmAlgorithm(unitary_cz, 10, 2, 1);
-    cout << circ_cz.toString() << endl;
-    assert(circ_cz.gates.size() == 3);
-    assert(xt::allclose(circ_cz.getUnitary(), unitary_cz));
-
-}
-
-int main() {
-    const clock_t begin_time = clock();
-/*    xt::xarray<complex<double>> unitary_cy = {
-            {1.0, 0.0, 0.0, 0.0},
-            {0.0, 1.0, 0.0, 0.0},
-            {0.0, 0.0, 0.0, -1.i},
-            {0.0, 0.0, 1.i, 0.0}
-    };*/
-    xt::xarray<complex<double>> unitary_cy = {
-            {1.0, 0.0,           0.0,            0.0},
-            {0.0, 1.0 / sqrt(2), 1.0 / sqrt(2),  0.0},
-            {0.0, 1.0 / sqrt(2), -1.0 / sqrt(2), 0.0},
-            {0.0, 0.0,           0.0,            0.0}
-    };
-    auto circ_cy = mitmAlgorithm(unitary_cy, 9, 2, 1);
-    std::cout << float(clock() - begin_time) / CLOCKS_PER_SEC << endl;
-    cout << circ_cy.toString() << endl;
-    return 0;
-}
