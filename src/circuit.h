@@ -37,7 +37,7 @@ public:
 
     vector<GateType> getGateSet();
 
-    xarrayc getUnitary();
+    xarrayc getUnitary() const;
 
     void toVectorRepresentation(vector<_GateType> &out);
 

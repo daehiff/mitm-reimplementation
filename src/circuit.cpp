@@ -92,7 +92,7 @@ void reorderGates(xarrayc &gate, const vector<int> &permutation) {
 }
 
 
-xarrayc Circuit::getUnitary() {
+xarrayc Circuit::getUnitary() const {
     xarrayc out = xt::eye(pow(2, this->numQubits));
     xarrayc gate_unitary;
     for (auto gate: this->gates) {
